@@ -3,8 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07042e">
   <title>Spooktacufur Karaoke</title>
   <link rel="icon" href="https://spooktacufur.com/assets/images/favicon.png">
+  <link rel="apple-touch-icon" href="https://spooktacufur.com/assets/images/apple-touch-icon.png">
   <!--
     Shows the Karaoke Queue web app full-screen in a frame. Opened directly,
     an Apps Script web app owned by a personal Google account gets a "created
@@ -13,8 +15,9 @@
     straight through to the app.
   -->
   <style>
-    html, body { margin: 0; height: 100%; background: #07042e; }
-    iframe { display: block; width: 100%; height: 100%; border: 0; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #07042e; }
+    /* dvh follows phone address bars as they show and hide; vh is the fallback. */
+    iframe { display: block; width: 100%; height: 100vh; height: 100dvh; border: 0; }
   </style>
 </head>
 <body>
