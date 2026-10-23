@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spooktacufur Karaoke</title>
+  <link rel="icon" href="https://spooktacufur.com/assets/images/favicon.png">
+  <!--
+    Shows the Karaoke Queue web app full-screen in a frame. Opened directly,
+    an Apps Script web app owned by a personal Google account gets a "created
+    by a Google Apps Script user" banner; framed by another site, it doesn't.
+    This page's query string (?page=display, ?page=admin&key=...) is passed
+    straight through to the app.
+  -->
+  <style>
+    html, body { margin: 0; height: 100%; background: #07042e; }
+    iframe { display: block; width: 100%; height: 100%; border: 0; }
+  </style>
+</head>
+<body>
+  <iframe id="app" title="Spooktacufur Karaoke" allow="clipboard-write"></iframe>
+  <script>
+    const APP_URL =
+      'https://script.google.com/macros/s/AKfycbwWMMDoirIpByTZqx8c43NIGTQrItTg5HJcEN9GzxOfICTw5mZUiOLXCN1lgTH6n_7w/exec';
+    document.getElementById('app').src = APP_URL + location.search;
+  </script>
+</body>
+</html>
