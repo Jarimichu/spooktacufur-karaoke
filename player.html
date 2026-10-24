@@ -84,6 +84,9 @@
     let latest = null;   // last answer from the app
     let shownId = null;  // what's on screen, so a poll with no change does nothing
     let ytEntry = null;  // who the YouTube player is playing, for its error message
+    let ytShownId = null;  // the shownId the YouTube player was last loaded for
+    let left = null;     // {id, seconds}: where a YouTube video was when its singer left the stage
+    let restartSeen = null;  // the last Restart pressed on the admin page
 
     function show(layerId) {
       ['ytLayer', 'spotifyLayer', 'idle', 'manual'].forEach(function (id) {
@@ -139,9 +142,19 @@
       show('manual');
     }
 
+    // Notes where the video was before it's swapped out, so Undo on the admin
+    // page (which brings back the same singer and start time, so the same id)
+    // picks the song up there instead of from the top.
+    function rememberPlace() {
+      if (ytReady && ytShownId && ytShownId === shownId) {
+        left = { id: shownId, seconds: ytPlayer.getCurrentTime() };
+      }
+    }
+
     function update(singing) {
       const id = singing ? singing.row + '|' + singing.link + '|' + singing.since : '';
       if (id === shownId) return;
+      rememberPlace();
       shownId = id;
       if (!singing) {
         document.getElementById('banner').hidden = true;
@@ -151,8 +164,10 @@
       const yt = youTubeId(singing.link);
       if (yt && ytReady) {
         ytEntry = singing;
+        ytShownId = id;
         show('ytLayer');
-        ytPlayer.loadVideoById(yt);
+        const resume = left && left.id === id ? Math.max(0, left.seconds - 2) : 0;
+        ytPlayer.loadVideoById({ videoId: yt, startSeconds: resume });
         return;
       }
       if (yt) {
@@ -167,6 +182,23 @@
       showManual(singing, singing.link ?
         "This link can't play here, so open it from the admin page." :
         'No link for this song, so play it from the admin page.');
+    }
+
+    // Pause/Play and Restart from the admin page, for YouTube videos. Checked
+    // on every poll, so a video that buffered or got paused some other way is
+    // brought back in line too.
+    function control(data) {
+      const restart = data.restart || 0;
+      const restartPressed = restartSeen !== null && restart !== restartSeen;
+      restartSeen = restart;
+      if (!started || !ytReady || !ytShownId || ytShownId !== shownId) return;
+      if (restartPressed) ytPlayer.seekTo(0, true);
+      const state = ytPlayer.getPlayerState();
+      if (data.paused && (state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING)) {
+        ytPlayer.pauseVideo();
+      } else if (!data.paused && (state === YT.PlayerState.PAUSED || restartPressed)) {
+        ytPlayer.playVideo();
+      }
     }
 
     function problem(text) {
@@ -185,6 +217,7 @@
             problem('');
             latest = data.singing;
             if (started) update(latest);
+            control(data);
           }
         })
         .catch(function () { problem('Reconnecting…'); })
