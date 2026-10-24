@@ -13,4 +13,9 @@ app:
 - `/?page=display` - crowd screen
 - `/?page=admin&key=...` - host controls
 
+`player.html?key=...` is the video TV: click Start once and it plays whoever
+the host puts on stage (YouTube full screen, Spotify embed, or a card saying to
+open the link by hand). It isn't a frame around the app, because a page inside
+Google's frames can't autoplay video with sound.
+
 The app itself (and its admin key) lives in a separate, private project.

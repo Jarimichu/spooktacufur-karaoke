@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spooktacufur Karaoke – Video</title>
+  <link rel="icon" href="https://spooktacufur.com/assets/images/favicon.png">
+  <!--
+    The video TV. Open it as player.html?key=<admin key>, drag the window to the
+    TV and click Start: from then on it plays whoever the host puts on stage.
+    It asks the karaoke app (?page=now) every few seconds and swaps the video
+    in place, never reloading, so the one Start click keeps sound allowed for
+    the whole night. Unlike index.html it isn't a frame around the app: a page
+    inside Google's frames can't autoplay video with sound.
+  -->
+  <style>
+    html, body {
+      margin: 0; height: 100%; overflow: hidden; cursor: none;
+      background: #000; color: #f5f2ff; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    [hidden] { display: none !important; }
+    .layer { position: absolute; inset: 0; }
+    .layer iframe { width: 100%; height: 100%; border: 0; display: block; }
+    .card {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 0 6vw; box-sizing: border-box;
+      background: radial-gradient(circle at 50% 40%, #241066, #07042e 70%);
+    }
+    .card img { width: min(50vw, 60vh); height: auto; margin-bottom: 4vh; }
+    .card h1 { margin: 0; font-size: 8vh; line-height: 1.1; overflow-wrap: anywhere; }
+    .card p { margin: 2vh 0 0; font-size: 3.6vh; color: #c9c2ee; }
+    .card .hint { font-size: 2.6vh; color: #aaa3d6; }
+    #start { cursor: pointer; }
+    #start h1 { color: #ff8a3d; }
+    .banner {
+      position: absolute; left: 0; right: 0; bottom: 6vh; padding: 2vh 4vw;
+      background: linear-gradient(90deg, rgba(208, 85, 1, 0.92), rgba(112, 0, 222, 0.92));
+      font-size: 5vh; font-weight: 800; text-align: center;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      transition: opacity 1s;
+    }
+    .banner.fade { opacity: 0; }
+    .problem {
+      position: absolute; left: 2vw; bottom: 2vh; font-size: 2vh;
+      background: rgba(0, 0, 0, 0.6); padding: 0.6vh 1vw; border-radius: 1vh;
+    }
+  </style>
+</head>
+<body>
+  <div id="ytLayer" class="layer" hidden><div id="yt"></div></div>
+  <div id="spotifyLayer" class="layer" hidden>
+    <iframe id="spotify" title="Spotify" allow="autoplay; encrypted-media"></iframe>
+  </div>
+
+  <div id="idle" class="card layer" hidden>
+    <img src="https://spooktacufur.com/assets/images/image01.png" alt="Spooktacufur">
+    <p>Karaoke: the next song will play here.</p>
+  </div>
+
+  <div id="manual" class="card layer" hidden>
+    <h1 id="manualName"></h1>
+    <p id="manualSong"></p>
+    <p class="hint" id="manualWhy"></p>
+  </div>
+
+  <div id="start" class="card layer">
+    <h1>Karaoke video player</h1>
+    <p>Drag this window to the video TV, then click anywhere to start.</p>
+    <p class="hint">It goes full screen and plays whoever is put on stage from the admin page.</p>
+  </div>
+
+  <div id="banner" class="banner" hidden></div>
+  <div id="problem" class="problem" hidden></div>
+
+  <script>
+    const APP_URL =
+      'https://script.google.com/macros/s/AKfycbwWMMDoirIpByTZqx8c43NIGTQrItTg5HJcEN9GzxOfICTw5mZUiOLXCN1lgTH6n_7w/exec';
+    const KEY = new URLSearchParams(location.search).get('key') || '';
+    const POLL_MS = 3000;
+
+    let ytPlayer = null;
+    let ytReady = false;
+    let started = false;
+    let latest = null;   // last answer from the app
+    let shownId = null;  // what's on screen, so a poll with no change does nothing
+    let ytEntry = null;  // who the YouTube player is playing, for its error message
+
+    function show(layerId) {
+      ['ytLayer', 'spotifyLayer', 'idle', 'manual'].forEach(function (id) {
+        document.getElementById(id).hidden = id !== layerId;
+      });
+      if (layerId !== 'ytLayer' && ytReady) ytPlayer.stopVideo();
+      if (layerId !== 'spotifyLayer') document.getElementById('spotify').src = 'about:blank';
+    }
+
+    function songLine(s) {
+      return [s.song, s.artist].filter(Boolean).join(' – ');
+    }
+
+    // youtu.be/ID, youtube.com/watch?v=ID, /shorts/ID, /live/ID, /embed/ID,
+    // on www., m. or music. hosts. '' if it isn't a YouTube video.
+    function youTubeId(link) {
+      try {
+        const url = new URL(link);
+        const host = url.hostname.replace(/^(www|m|music)\./, '');
+        let id = '';
+        if (host === 'youtu.be') id = url.pathname.split('/')[1] || '';
+        else if (host === 'youtube.com') {
+          const path = url.pathname.match(/^\/(?:shorts|live|embed)\/([\w-]+)/);
+          id = url.searchParams.get('v') || (path ? path[1] : '');
+        }
+        return /^[\w-]{6,20}$/.test(id) ? id : '';
+      } catch (err) {
+        return '';
+      }
+    }
+
+    function spotifyEmbed(link) {
+      const m = /^https?:\/\/open\.spotify\.com\/(?:intl-[a-z-]+\/)?(track|album|playlist|episode)\/([A-Za-z0-9]+)/.exec(link);
+      return m ? 'https://open.spotify.com/embed/' + m[1] + '/' + m[2] + '?autoplay=1' : '';
+    }
+
+    function showBanner(s) {
+      const banner = document.getElementById('banner');
+      banner.textContent = 'Now singing: ' + s.name + (songLine(s) ? ' · ' + songLine(s) : '');
+      banner.hidden = false;
+      banner.classList.remove('fade');
+      clearTimeout(showBanner.timer);
+      showBanner.timer = setTimeout(function () {
+        banner.classList.add('fade');
+        setTimeout(function () { banner.hidden = true; }, 1000);
+      }, 6000);
+    }
+
+    function showManual(s, why) {
+      document.getElementById('manualName').textContent = s.name;
+      document.getElementById('manualSong').textContent = songLine(s);
+      document.getElementById('manualWhy').textContent = why;
+      show('manual');
+    }
+
+    function update(singing) {
+      const id = singing ? singing.row + '|' + singing.link + '|' + singing.since : '';
+      if (id === shownId) return;
+      shownId = id;
+      if (!singing) {
+        document.getElementById('banner').hidden = true;
+        return show('idle');
+      }
+      showBanner(singing);
+      const yt = youTubeId(singing.link);
+      if (yt && ytReady) {
+        ytEntry = singing;
+        show('ytLayer');
+        ytPlayer.loadVideoById(yt);
+        return;
+      }
+      if (yt) {
+        shownId = null;  // try again once the YouTube player has loaded
+        return;
+      }
+      const spotify = spotifyEmbed(singing.link);
+      if (spotify) {
+        document.getElementById('spotify').src = spotify;
+        return show('spotifyLayer');
+      }
+      showManual(singing, singing.link ?
+        "This link can't play here, so open it from the admin page." :
+        'No link for this song, so play it from the admin page.');
+    }
+
+    function problem(text) {
+      const box = document.getElementById('problem');
+      box.textContent = text;
+      box.hidden = !text;
+    }
+
+    function poll() {
+      fetch(APP_URL + '?page=now&key=' + encodeURIComponent(KEY), { cache: 'no-store' })
+        .then(function (response) { return response.json(); })
+        .then(function (data) {
+          if (data.error) {
+            problem("The karaoke app refused this page's key. Open the player from the admin page again.");
+          } else {
+            problem('');
+            latest = data.singing;
+            if (started) update(latest);
+          }
+        })
+        .catch(function () { problem('Reconnecting…'); })
+        .then(function () { setTimeout(poll, POLL_MS); });
+    }
+
+    // Called by the YouTube IFrame API script below once it has loaded.
+    window.onYouTubeIframeAPIReady = function () {
+      ytPlayer = new YT.Player('yt', {
+        width: '100%',
+        height: '100%',
+        playerVars: { autoplay: 1, rel: 0, playsinline: 1 },
+        events: {
+          onReady: function () {
+            ytReady = true;
+            if (started) update(latest);
+          },
+          // 101 and 150: the video's owner doesn't allow it on other sites.
+          onError: function (event) {
+            if (!ytEntry) return;
+            showManual(ytEntry, event.data === 101 || event.data === 150 ?
+              "This video can't be played outside YouTube, so open it from the admin page." :
+              "This video couldn't play, so open it from the admin page.");
+          },
+        },
+      });
+    };
+
+    // The one click that lets videos play with sound for the rest of the night.
+    document.getElementById('start').addEventListener('click', function () {
+      started = true;
+      document.getElementById('start').hidden = true;
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(function () {});
+      }
+      shownId = null;
+      update(latest);
+    });
+
+    if (!KEY) problem('This page needs the admin key: open it from the admin page.');
+    poll();
+  </script>
+  <script src="https://www.youtube.com/iframe_api"></script>
+</body>
+</html>
