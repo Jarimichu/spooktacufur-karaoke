@@ -21,6 +21,9 @@
     [hidden] { display: none !important; }
     .layer { position: absolute; inset: 0; }
     .layer iframe { width: 100%; height: 100%; border: 0; display: block; }
+    /* Over the video: keeps the mouse (and its cursor) off YouTube's player,
+       which would otherwise show its title and controls while it's hovered. */
+    .shield { position: absolute; inset: 0; cursor: none; }
     .card {
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       text-align: center; padding: 0 6vw; box-sizing: border-box;
@@ -47,7 +50,7 @@
   </style>
 </head>
 <body>
-  <div id="ytLayer" class="layer" hidden><div id="yt"></div></div>
+  <div id="ytLayer" class="layer" hidden><div id="yt"></div><div class="shield"></div></div>
   <div id="spotifyLayer" class="layer" hidden>
     <iframe id="spotify" title="Spotify" allow="autoplay; encrypted-media"></iframe>
   </div>
@@ -284,7 +287,9 @@
       ytPlayer = new YT.Player('yt', {
         width: '100%',
         height: '100%',
-        playerVars: { autoplay: 1, rel: 0, playsinline: 1 },
+        // No controls, keyboard shortcuts, fullscreen button or annotations:
+        // nobody touches the TV, and the admin page plays and pauses it.
+        playerVars: { autoplay: 1, controls: 0, disablekb: 1, fs: 0, iv_load_policy: 3, rel: 0, playsinline: 1 },
         events: {
           onReady: function () {
             ytReady = true;
