@@ -51,9 +51,6 @@
 </head>
 <body>
   <div id="ytLayer" class="layer" hidden><div id="yt"></div><div class="shield"></div></div>
-  <div id="spotifyLayer" class="layer" hidden>
-    <iframe id="spotify" title="Spotify" allow="autoplay; encrypted-media"></iframe>
-  </div>
 
   <div id="idle" class="card layer" hidden>
     <img src="https://spooktacufur.com/assets/images/image01.png" alt="Spooktacufur">
@@ -100,11 +97,10 @@
     const appliedSeeks = {};
 
     function show(layerId) {
-      ['ytLayer', 'spotifyLayer', 'idle', 'manual'].forEach(function (id) {
+      ['ytLayer', 'idle', 'manual'].forEach(function (id) {
         document.getElementById(id).hidden = id !== layerId;
       });
       if (layerId !== 'ytLayer' && ytReady) ytPlayer.stopVideo();
-      if (layerId !== 'spotifyLayer') document.getElementById('spotify').src = 'about:blank';
     }
 
     function songLine(s) {
@@ -127,11 +123,6 @@
       } catch (err) {
         return '';
       }
-    }
-
-    function spotifyEmbed(link) {
-      const m = /^https?:\/\/open\.spotify\.com\/(?:intl-[a-z-]+\/)?(track|album|playlist|episode)\/([A-Za-z0-9]+)/.exec(link);
-      return m ? 'https://open.spotify.com/embed/' + m[1] + '/' + m[2] + '?autoplay=1' : '';
     }
 
     function showBanner(s) {
@@ -185,14 +176,13 @@
         shownId = null;  // try again once the YouTube player has loaded
         return;
       }
-      const spotify = spotifyEmbed(singing.link);
-      if (spotify) {
-        document.getElementById('spotify').src = spotify;
-        return show('spotifyLayer');
-      }
-      showManual(singing, singing.link ?
-        "This link can't play here, so open it from the admin page." :
-        'No link for this song, so play it from the admin page.');
+      // Spotify's player isn't used here: it only plays 30-second previews
+      // unless the browser is signed in, and it made the TV flash (Oct 2026).
+      showManual(singing,
+        /^https?:\/\/open\.spotify\.com\//i.test(singing.link) ?
+          'This is a Spotify song, so it plays from the admin page.' :
+        singing.link ? "This link can't play here, so open it from the admin page." :
+          'No link for this song, so play it from the admin page.');
     }
 
     // Pause/Play and Restart from the admin page, for YouTube videos. Checked

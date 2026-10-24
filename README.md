@@ -14,8 +14,14 @@ app:
 - `/?page=admin&key=...` - host controls
 
 `player.html?key=...` is the video TV: click Start once and it plays whoever
-the host puts on stage (YouTube full screen, Spotify embed, or a card saying to
-open the link by hand). It isn't a frame around the app, because a page inside
-Google's frames can't autoplay video with sound.
+the host puts on stage (YouTube full screen, or for Spotify and other links a
+card saying to play it from the admin page). It isn't a frame around the app,
+because a page inside Google's frames can't autoplay video with sound.
+
+When the admin page is open through `index.html` in the same browser as the
+player, the two talk over a `BroadcastChannel` that `index.html` relays: the
+player reports its position several times a second, so the admin page's muted
+preview stays in step with the TV, and the admin page's play, pause, restart
+and progress bar reach the TV at once.
 
 The app itself (and its admin key) lives in a separate, private project.
