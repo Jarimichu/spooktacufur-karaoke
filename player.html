@@ -96,6 +96,8 @@
     let localPaused = null;
     let localUntil = 0;
     const appliedRestarts = {};
+    let seekSeen = null;      // the last progress-bar jump from the admin page
+    const appliedSeeks = {};
 
     function show(layerId) {
       ['ytLayer', 'spotifyLayer', 'idle', 'manual'].forEach(function (id) {
@@ -200,8 +202,12 @@
       const restart = String(data.restart || 0);
       const restartPressed = restartSeen !== null && restart !== restartSeen && !appliedRestarts[restart];
       restartSeen = restart;
+      const seekToken = data.seek ? String(data.seek.token) : '';
+      const seekPressed = seekSeen !== null && seekToken !== seekSeen && !appliedSeeks[seekToken];
+      seekSeen = seekToken;
       if (!started || !ytReady || !ytShownId || ytShownId !== shownId) return;
       if (restartPressed) ytPlayer.seekTo(0, true);
+      else if (seekPressed) ytPlayer.seekTo(Math.max(0, Number(data.seek.to) || 0), true);
       let paused = data.paused;
       if (Date.now() < localUntil) {
         if (paused === localPaused) localUntil = 0;
@@ -239,6 +245,12 @@
       channel.onmessage = function (event) {
         const msg = event.data;
         if (!msg || msg.karaoke !== 1 || msg.type !== 'command' || !showingYouTube()) return;
+        // The progress bar: jump there, playing or paused as it was.
+        if (msg.action === 'seek') {
+          appliedSeeks[String(msg.token)] = true;
+          ytPlayer.seekTo(Math.max(0, Number(msg.to) || 0), true);
+          return broadcast();
+        }
         if (msg.action === 'restart') {
           appliedRestarts[String(msg.token)] = true;
           ytPlayer.seekTo(0, true);
