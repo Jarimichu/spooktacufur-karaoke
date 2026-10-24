@@ -26,6 +26,36 @@
     const APP_URL =
       'https://script.google.com/macros/s/AKfycbwWMMDoirIpByTZqx8c43NIGTQrItTg5HJcEN9GzxOfICTw5mZUiOLXCN1lgTH6n_7w/exec';
     document.getElementById('app').src = APP_URL + location.search;
+
+    // The admin page's live link to the video player (player.html, open in
+    // another window of this browser on the host's PC). The admin page runs in
+    // Google's frames, which can't reach player.html, so this page passes the
+    // player's position reports in and the admin page's pause, play and
+    // restart out, without waiting on Google. Nothing happens until the admin
+    // page says hello, so the signup and display pages never open the channel.
+    const CHANNEL = 'spooktacufur-karaoke';
+    let channel = null;
+    let admin = null;  // the admin page's window and origin
+
+    function hostOf(origin) {
+      try { return new URL(origin).hostname; } catch (err) { return ''; }
+    }
+
+    window.addEventListener('message', function (event) {
+      const msg = event.data;
+      if (!msg || msg.karaoke !== 1 || !/\.googleusercontent\.com$/.test(hostOf(event.origin))) return;
+      admin = { window: event.source, origin: event.origin };
+      if (!channel && 'BroadcastChannel' in window) {
+        channel = new BroadcastChannel(CHANNEL);
+        channel.onmessage = function (e) {
+          if (!e.data || e.data.karaoke !== 1 || e.data.type !== 'tv') return;
+          window.karaokeTv = e.data;  // with karaokePreview, for checking the sync from the console
+          admin.window.postMessage(e.data, admin.origin);
+        };
+      }
+      if (msg.type === 'command' && channel) channel.postMessage(msg);
+      if (msg.type === 'preview') window.karaokePreview = msg;
+    });
   </script>
 </body>
 </html>

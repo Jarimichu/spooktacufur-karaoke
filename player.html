@@ -87,6 +87,12 @@
     let ytShownId = null;  // the shownId the YouTube player was last loaded for
     let left = null;     // {id, seconds}: where a YouTube video was when its singer left the stage
     let restartSeen = null;  // the last Restart pressed on the admin page
+    // Pause/play straight from the admin page (through index.html) wins over
+    // the app's answers until the app has caught up, so a poll that left
+    // before the click can't undo it. Restarts done that way aren't redone.
+    let localPaused = null;
+    let localUntil = 0;
+    const appliedRestarts = {};
 
     function show(layerId) {
       ['ytLayer', 'spotifyLayer', 'idle', 'manual'].forEach(function (id) {
@@ -188,17 +194,58 @@
     // on every poll, so a video that buffered or got paused some other way is
     // brought back in line too.
     function control(data) {
-      const restart = data.restart || 0;
-      const restartPressed = restartSeen !== null && restart !== restartSeen;
+      const restart = String(data.restart || 0);
+      const restartPressed = restartSeen !== null && restart !== restartSeen && !appliedRestarts[restart];
       restartSeen = restart;
       if (!started || !ytReady || !ytShownId || ytShownId !== shownId) return;
       if (restartPressed) ytPlayer.seekTo(0, true);
+      let paused = data.paused;
+      if (Date.now() < localUntil) {
+        if (paused === localPaused) localUntil = 0;
+        else paused = localPaused;
+      }
       const state = ytPlayer.getPlayerState();
-      if (data.paused && (state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING)) {
+      if (paused && (state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING)) {
         ytPlayer.pauseVideo();
-      } else if (!data.paused && (state === YT.PlayerState.PAUSED || restartPressed)) {
+      } else if (!paused && (state === YT.PlayerState.PAUSED || restartPressed)) {
         ytPlayer.playVideo();
       }
+    }
+
+    // ---- Live link to the admin page on this PC (through index.html) ----
+    // Several times a second: what the video is doing, so the admin page's
+    // muted copy can stay within a fraction of a second of the TV.
+    const channel = 'BroadcastChannel' in window ? new BroadcastChannel('spooktacufur-karaoke') : null;
+    const BROADCAST_MS = 250;
+
+    function showingYouTube() {
+      return started && ytReady && ytShownId && ytShownId === shownId;
+    }
+
+    function broadcast() {
+      if (!channel) return;
+      const on = showingYouTube();
+      channel.postMessage({
+        karaoke: 1, type: 'tv', id: on ? shownId : '', pos: on ? ytPlayer.getCurrentTime() : 0,
+        playing: on && ytPlayer.getPlayerState() === YT.PlayerState.PLAYING, at: Date.now(),
+      });
+    }
+
+    if (channel) {
+      setInterval(broadcast, BROADCAST_MS);
+      channel.onmessage = function (event) {
+        const msg = event.data;
+        if (!msg || msg.karaoke !== 1 || msg.type !== 'command' || !showingYouTube()) return;
+        if (msg.action === 'restart') {
+          appliedRestarts[String(msg.token)] = true;
+          ytPlayer.seekTo(0, true);
+        }
+        localPaused = msg.action === 'pause';
+        localUntil = Date.now() + 10000;
+        if (localPaused) ytPlayer.pauseVideo();
+        else ytPlayer.playVideo();
+        broadcast();
+      };
     }
 
     function problem(text) {
